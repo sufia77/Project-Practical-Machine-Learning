@@ -1,0 +1,142 @@
+---
+title: "Machine Learning Algorithm on Human Activity Dataset"
+author: "Sufia Khatun"
+date: "August 19, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+This human activity recognition research has traditionally focused on discriminating between different activities, i.e. to predict "which" activity was performed at a specific point in time. The Weight Lifting Exercises dataset was used to investigate "how (well)" an activity was performed by the wearer.
+
+Six young health participants were asked to perform one set of 10 repetitions of the Unilateral Dumbbell Biceps Curl in five different fashions: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E).
+
+Read more: http://groupware.les.inf.puc-rio.br/har#ixzz4Hmnx71jD
+
+The goal of this project is to predict the manner in which they did the exercise. This is the "classe" variable in the training set.
+
+```{r library, message=FALSE}
+library(caret)
+library(randomForest)
+library(rpart)
+library(ggplot2)
+library(doParallel)
+source("http://peterhaschke.com/Code/multiplot.R") # for multiplot function
+```
+
+## Loding Dataset
+
+The training dataset was loaded from the following:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+The test dataset was loaded from the following:
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+During reading the dataset, the missing values were replaced by NA
+
+```{r}
+# Replaced missing values with NA
+data1 <- read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!", ""))
+data2 <- read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!", ""))
+dim(data1)
+dim(data2)
+```
+
+## Data Processing
+
+```{r}
+# Deleting columns with missing values.
+newdata1 <- data1[,colSums(is.na(data1)) == 0]
+newdata2 <- data2[,colSums(is.na(data2)) == 0] # test dataset
+dim(newdata1); dim(newdata2)
+names(newdata1)
+
+# Now remove the variables that is not needed for this analysis
+newdata1 <- newdata1[, -c(1:7)]
+newdata2 <- newdata2[,-c(1:7)]
+```
+
+## Cross-Validation
+
+Since the test dataset was given, the training dataset was split into training and testing dataset.  
+```{r}
+set.seed(12300)
+inTrain <- createDataPartition(y=newdata1$classe, p=0.75, list=FALSE)
+training <- newdata1[inTrain, ]
+testing <- newdata1[-inTrain, ]
+```
+
+Visualize the relation of two variables for different classe and their correlation
+
+```{r}
+g1 <- ggplot(data = training, aes(x=magnet_arm_y, magnet_arm_z, col = classe))+ geom_point() + ggtitle("Simmilar Activity Data")
+
+g2 <- ggplot(data = training, aes(x=roll_belt, magnet_arm_z, col = classe)) + geom_point() + ggtitle("Different Activity Data")
+
+multiplot(g1, g2, cols = 2) # two plot in a single row
+
+# Correlation between the Var
+cor(training$magnet_arm_y, training$magnet_arm_z)
+cor(training$roll_belt, training$magnet_arm_z)
+```
+
+## Model Selection
+
+This study was a multiclass classification problem. Also, from the above figure and correlation values, it was positive that there were some variables that were highly correlated. So, there was a possibility to get high variance or overfitting problem if linear or logistic regression were chosen. Random forest reduce the probability of high variance, handle large number of variables and can estimates of what variables are important in the classification. These were the reasons for chossing Random Forest algorithm for this study. For final decision, this model were compared with Decision Tree model.
+
+#### Model1: Random Forest
+```{r}
+model1 <- randomForest(classe~.,data=training, importance = TRUE, ntrees = 10)
+pred1 <- predict(model1, training)
+confusionMatrix(pred1, training$classe)
+```
+
+#### Model2: Decision Tree
+```{r}
+model2 <- rpart(classe ~ ., data=training, method="class")
+pred2 <- predict(model2, training, type = "class")
+confusionMatrix(pred2, training$classe)
+```
+
+From observing the accuracy and prediction values of these two model, it can be said that Random Forest is better model for this dataset. Now, this model can be applied to the testing dataset before applying to the test dataset.
+
+#### Model1 on testing dataset.
+
+```{r}
+# predict outcome for test data set using the random forest model
+pred3 <- predict(model1,testing)
+confusionMatrix(pred3, testing$classe)
+```
+
+### Model1 on test dataset.
+
+```{r}
+pred4 <- predict(model1, newdata2) # Applying model1 on test dataset for quiz
+pred4
+```
+
+## Out of sample error
+
+In sample and out of sample error:
+
+```{r}
+(1-.9969)*100 # accuracy = 0.9969
+```
+
+Out of sample error:
+```{r}
+SA <- sum(pred3 == testing$classe)/length(pred3)
+
+# Out of sample error
+(1-SA)*100
+```
+
+## Conclusion:
+
+After study the two models, it can be said that Random Forest model is appropriate for this dataset. The accuracy of random forest model is 99% for both training and test dataset where the accuracy of decision tree model is 72% for the training dataset. Also, this model predicted the test dataset appropriately.
